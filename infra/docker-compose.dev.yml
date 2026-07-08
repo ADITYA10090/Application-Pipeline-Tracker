@@ -1,0 +1,15 @@
+# Dev override: only the backing stores, with ports published to the host so
+# you can run the app services locally (npm/uvicorn/go run) against them.
+# Usage:  docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up postgres mongo redis
+name: trackfolio
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+  mongo:
+    ports:
+      - "27017:27017"
+  redis:
+    ports:
+      - "6379:6379"
