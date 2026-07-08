@@ -11,6 +11,7 @@ import (
 
 	"trackfolio/scraper-go/internal/config"
 	"trackfolio/scraper-go/internal/pipeline"
+	"trackfolio/scraper-go/internal/queue"
 	"trackfolio/scraper-go/internal/server"
 	"trackfolio/scraper-go/internal/store"
 )
@@ -45,7 +46,17 @@ func main() {
 		defer mongo.Close(context.Background())
 	}
 
-	pl := pipeline.New(cfg, pg, raw, nil, log)
+	// Redis backs the dedup cache and work queue; best-effort like Mongo so a
+	// missing Redis degrades to Postgres-only dedup instead of failing.
+	var dedup pipeline.Dedup
+	if r, err := queue.NewRedis(cfg.RedisAddr, cfg.DedupTTLSeconds); err != nil {
+		log.Warn("redis unavailable, dedup cache + queue disabled", "err", err)
+	} else {
+		dedup = r
+		defer r.Close()
+	}
+
+	pl := pipeline.New(cfg, pg, raw, dedup, log)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
