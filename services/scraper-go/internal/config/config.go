@@ -43,6 +43,15 @@ func getenv(key, def string) string {
 	return def
 }
 
+// lookupOrDefault returns the env value if the variable is set (even to empty),
+// otherwise the default. Lets callers explicitly disable a feature via KEY="".
+func lookupOrDefault(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return def
+}
+
 func getenvInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -55,9 +64,11 @@ func getenvInt(key string, def int) int {
 // Load reads configuration from the environment, applying sensible defaults.
 func Load() Config {
 	c := Config{
-		HTTPAddr:        getenv("SCRAPER_HTTP_ADDR", ":8081"),
-		PostgresURL:     getenv("POSTGRES_URL", "postgres://postgres:postgres@localhost:5432/trackfolio?sslmode=disable"),
-		MongoURI:        getenv("MONGO_URI", "mongodb://localhost:27017"),
+		HTTPAddr: getenv("SCRAPER_HTTP_ADDR", ":8081"),
+		PostgresURL: getenv("POSTGRES_URL", "postgres://postgres:postgres@localhost:5432/trackfolio?sslmode=disable"),
+		// MongoURI: an explicitly-set empty value disables raw-JD storage
+		// (LookupEnv distinguishes "set to empty" from "unset").
+		MongoURI:        lookupOrDefault("MONGO_URI", "mongodb://localhost:27017"),
 		MongoDB:         getenv("MONGO_DB", "trackfolio"),
 		RedisAddr:       getenv("REDIS_ADDR", "localhost:6379"),
 		GreenhouseBase:  getenv("SCRAPER_GREENHOUSE_BASE", "https://boards-api.greenhouse.io"),

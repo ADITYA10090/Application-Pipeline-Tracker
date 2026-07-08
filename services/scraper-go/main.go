@@ -33,17 +33,22 @@ func main() {
 	}
 	defer pg.Close()
 
-	// Mongo is best-effort: if it is unreachable the scraper still records
-	// structured fields in Postgres, it just skips the raw-JD copy.
+	// Mongo is best-effort: if it is unreachable (or MONGO_URI is empty) the
+	// scraper still records structured fields in Postgres, it just skips the
+	// raw-JD copy.
 	var raw pipeline.RawStore
-	mgoCtx, mgoCancel := context.WithTimeout(ctx, 10*time.Second)
-	mongo, err := store.NewMongo(mgoCtx, cfg.MongoURI, cfg.MongoDB)
-	mgoCancel()
-	if err != nil {
-		log.Warn("mongo unavailable, raw JD storage disabled", "err", err)
+	if cfg.MongoURI == "" {
+		log.Warn("MONGO_URI empty, raw JD storage disabled")
 	} else {
-		raw = mongo
-		defer mongo.Close(context.Background())
+		mgoCtx, mgoCancel := context.WithTimeout(ctx, 10*time.Second)
+		mongo, err := store.NewMongo(mgoCtx, cfg.MongoURI, cfg.MongoDB)
+		mgoCancel()
+		if err != nil {
+			log.Warn("mongo unavailable, raw JD storage disabled", "err", err)
+		} else {
+			raw = mongo
+			defer mongo.Close(context.Background())
+		}
 	}
 
 	// Redis backs the dedup cache and work queue; best-effort like Mongo so a
