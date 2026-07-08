@@ -1,0 +1,4 @@
+PORT/app
+.venv
+__pycache__
+.env
