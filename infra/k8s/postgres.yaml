@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: trackfolio
+data:
+  # NOTE: keep in sync with db/schema.sql. Applied on first init of the volume.
+  01-schema.sql: |
+    CREATE TABLE IF NOT EXISTS companies (
+        id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, website TEXT,
+        career_page_url TEXT, industry TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+    CREATE TABLE IF NOT EXISTS job_postings (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        title TEXT NOT NULL, url TEXT NOT NULL UNIQUE, location TEXT,
+        posted_date DATE, scraped_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        mongo_jd_ref TEXT, status TEXT NOT NULL DEFAULT 'open');
+    CREATE TABLE IF NOT EXISTS applications (
+        id SERIAL PRIMARY KEY,
+        job_posting_id INTEGER NOT NULL REFERENCES job_postings(id) ON DELETE CASCADE UNIQUE,
+        resume_version TEXT, applied_date DATE,
+        current_status TEXT NOT NULL DEFAULT 'wishlist'
+          CHECK (current_status IN ('wishlist','applied','oa','interview','offer','rejected')),
+        match_score REAL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+    CREATE TABLE IF NOT EXISTS status_events (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','email_parsed')),
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT now());
+    CREATE TABLE IF NOT EXISTS resume_versions (
+        id SERIAL PRIMARY KEY, filename TEXT NOT NULL, content_hash TEXT NOT NULL,
+        tailored_for_job_id INTEGER REFERENCES job_postings(id) ON DELETE SET NULL,
+        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now());
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: trackfolio
+spec:
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None # headless, for the StatefulSet
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: trackfolio
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: trackfolio-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: trackfolio-secrets, key: POSTGRES_PASSWORD } }
+            - name: POSTGRES_DB
+              value: trackfolio
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "postgres", "-d", "trackfolio"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: initdb
+          configMap: { name: postgres-initdb }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
