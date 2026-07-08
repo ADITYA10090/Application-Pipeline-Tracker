@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trackfolio
+  namespace: trackfolio
+  # No rewrite-target: paths pass through unchanged so the gateway keeps its
+  # /api prefix and the frontend receives the original path.
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # More specific /api prefix first so it wins over the / catch-all.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
