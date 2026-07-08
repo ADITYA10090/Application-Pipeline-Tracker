@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trackfolio
+  namespace: trackfolio
+  # No rewrite-target: paths are passed through unchanged so /api/... reaches
+  # the gateway intact and the SPA handles its own client-side routes.
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: trackfolio.local
+      http:
+        paths:
+          # API + health go to the gateway; everything else to the frontend.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
