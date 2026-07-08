@@ -114,7 +114,7 @@ func (e *Engine) drain(ctx context.Context) {
 
 	// Dispatcher: pull until the queue is empty, then close the channel.
 	for {
-		j, err := e.queue.Dequeue(ctx, 500*time.Millisecond)
+		j, err := e.queue.Dequeue(ctx, 1*time.Second)
 		if err != nil {
 			e.metrics.Errors.Add(1)
 			e.log.Error("dequeue failed", "err", err)
